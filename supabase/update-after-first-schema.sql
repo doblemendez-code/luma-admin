@@ -61,6 +61,8 @@ alter table public.service_records add column if not exists transfer_amount nume
 alter table public.service_records add column if not exists card_amount numeric(10,2) not null default 0 check (card_amount >= 0);
 alter table public.service_records drop constraint if exists service_records_payment_method_check;
 alter table public.service_records add constraint service_records_payment_method_check check (payment_method in ('Transferencia', 'Efectivo', 'Tarjeta', 'Mixto')) not valid;
+alter table public.service_records drop constraint if exists service_records_tip_payment_method_check;
+alter table public.service_records add constraint service_records_tip_payment_method_check check (tip_payment_method in ('Transferencia', 'Efectivo', 'Tarjeta')) not valid;
 
 alter table public.appointments drop column if exists deposit_status;
 alter table public.appointments drop column if exists deposit_payment_method;

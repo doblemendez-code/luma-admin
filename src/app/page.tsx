@@ -49,7 +49,19 @@ function startOfWeek(date = new Date()) {
 }
 
 function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return localDateKey(date);
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function localDateTimeInputToIso(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function displayDate(date: Date) {
@@ -199,7 +211,7 @@ export default function Home() {
   async function signIn() {
     if (!supabase || !email || !password) return;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setMessage(error ? error.message : "Entrando...");
+    setMessage(error ? error.message : "");
   }
 
   async function createClient(formData: FormData) {
@@ -216,8 +228,11 @@ export default function Home() {
       return;
     }
     const { error } = await supabase.from("clients").insert(payload);
-    setMessage(error ? error.message : "Clienta guardada.");
-    if (!error) setShowClientCreateModal(false);
+    if (error) setMessage(error.message);
+    if (!error) {
+      setMessage("");
+      setShowClientCreateModal(false);
+    }
     await loadData(profile);
   }
 
@@ -237,12 +252,12 @@ export default function Home() {
       client_name: clientName,
       requested_service: String(formData.get("requested_service")),
       provider: String(formData.get("provider")),
-      appointment_at: String(formData.get("appointment_at")),
+      appointment_at: localDateTimeInputToIso(String(formData.get("appointment_at"))),
       contact_channel: String(formData.get("contact_channel")),
       created_by: session?.user.id,
     };
     const { error } = await supabase.from("appointments").insert(payload);
-    setMessage(error ? error.message : "Cita guardada.");
+    setMessage(error ? error.message : "");
     await loadData(profile);
   }
 
@@ -262,7 +277,7 @@ export default function Home() {
     if (!error) {
       await supabase.from("appointments").update({ client_name: payload.full_name }).eq("client_id", selectedClientStats.client.id);
     }
-    setMessage(error ? error.message : "Clienta actualizada.");
+    setMessage(error ? error.message : "");
     await loadData(profile);
   }
 
@@ -297,7 +312,7 @@ export default function Home() {
       created_by: session?.user.id,
     };
     const { error } = await supabase.from("service_records").insert(payload);
-    setMessage(error ? error.message : `Servicio cerrado. Total cobrado: ${money(cost)}.`);
+    setMessage(error ? error.message : "");
     if (!error) setCloseAppointmentId("");
     await loadData(profile);
   }
@@ -313,8 +328,11 @@ export default function Home() {
       created_by: session?.user.id,
     };
     const { error } = await supabase.from("expenses").insert(payload);
-    setMessage(error ? error.message : "Gasto guardado.");
-    if (!error) setShowExpenseCreateModal(false);
+    if (error) setMessage(error.message);
+    if (!error) {
+      setMessage("");
+      setShowExpenseCreateModal(false);
+    }
     await loadData(profile);
   }
 
@@ -336,8 +354,11 @@ export default function Home() {
       return;
     }
     const { error } = await supabase.from("payroll_deductions").insert(payload);
-    setMessage(error ? error.message : "Descuento a nomina guardado.");
-    if (!error) setShowPayrollDeductionModal(false);
+    if (error) setMessage(error.message);
+    if (!error) {
+      setMessage("");
+      setShowPayrollDeductionModal(false);
+    }
     await loadData(profile);
   }
 
@@ -353,8 +374,11 @@ export default function Home() {
       return;
     }
     const { error } = await supabase.from("employees").insert(payload);
-    setMessage(error ? error.message : "Empleado guardado.");
-    if (!error) setShowEmployeeCreateModal(false);
+    if (error) setMessage(error.message);
+    if (!error) {
+      setMessage("");
+      setShowEmployeeCreateModal(false);
+    }
     await loadData(profile);
   }
 
@@ -366,22 +390,25 @@ export default function Home() {
       return;
     }
     const { error } = await supabase.from("employees").update(payload).eq("id", employeeEditId);
-    setMessage(error ? error.message : "Empleado actualizado.");
-    setEmployeeEditId("");
+    if (error) setMessage(error.message);
+    if (!error) {
+      setMessage("");
+      setEmployeeEditId("");
+    }
     await loadData(profile);
   }
 
   async function setEmployeeActive(id: string, isActive: boolean) {
     if (!supabase) return;
     const { error } = await supabase.from("employees").update({ is_active: isActive }).eq("id", id);
-    setMessage(error ? error.message : isActive ? "Empleado reactivado." : "Empleado inactivado.");
+    setMessage(error ? error.message : "");
     await loadData(profile);
   }
 
   async function cancelAppointment(id: string) {
     if (!supabase || !isAdmin) return;
     const { error } = await supabase.from("appointments").update({ canceled: true }).eq("id", id);
-    setMessage(error ? error.message : "Cita cancelada.");
+    setMessage(error ? error.message : "");
     await loadData(profile);
   }
 
@@ -426,7 +453,10 @@ export default function Home() {
     const providerRecords = weeklyRecords.filter((record) => record.provider === employee.full_name);
     const sales = providerRecords.reduce((sum, record) => sum + Number(record.cost), 0);
     const tips = providerRecords.reduce((sum, record) => sum + Number(record.tip_amount), 0);
-    const cardFees = employee.deduct_card_fee ? providerRecords.reduce((sum, record) => sum + Number(record.card_amount || 0) * cardFeeRate, 0) : 0;
+    const cardFees = employee.deduct_card_fee ? providerRecords.reduce((sum, record) => {
+      const cardTips = record.tip_payment_method === "Tarjeta" ? Number(record.tip_amount || 0) : 0;
+      return sum + (Number(record.card_amount || 0) + cardTips) * cardFeeRate;
+    }, 0) : 0;
     const payrollDiscounts = weeklyPayrollDeductions.filter((deduction) => deduction.employee_id === employee.id || deduction.employee_name === employee.full_name).reduce((sum, deduction) => sum + Number(deduction.amount), 0);
     const commission = providerRecords.reduce((sum, record) => {
       const dayKey = dayKeyFromDate(record.service_date);
@@ -448,7 +478,8 @@ export default function Home() {
       const clientRecords = records.filter((record) => record.client_id === client.id);
       const clientAppointments = appointments.filter((appointment) => appointment.client_id === client.id);
       const totalSpent = clientRecords.reduce((sum, record) => sum + Number(record.cost), 0);
-      const lastVisit = clientRecords[0]?.service_date ?? clientAppointments[clientAppointments.length - 1]?.appointment_at?.slice(0, 10) ?? "Sin visitas";
+      const lastAppointment = clientAppointments[clientAppointments.length - 1]?.appointment_at;
+      const lastVisit = clientRecords[0]?.service_date ?? (lastAppointment ? localDateKey(new Date(lastAppointment)) : "Sin visitas");
       return { client, appointments: clientAppointments.length, services: clientRecords.length, totalSpent, lastVisit };
     })
     .sort((a, b) => b.totalSpent - a.totalSpent || b.services - a.services);
@@ -490,7 +521,7 @@ export default function Home() {
     const date = new Date(monthStart);
     date.setDate(index - monthOffset + 1);
     const key = toDateInput(date);
-    return { key, label: String(date.getDate()), appointments: calendarAppointments.filter((appointment) => appointment.appointment_at.slice(0, 10) === key) };
+    return { key, label: String(date.getDate()), appointments: calendarAppointments.filter((appointment) => localDateKey(new Date(appointment.appointment_at)) === key) };
   });
   const visibleCalendarDay = calendarDays.find((day) => day?.key === calendarModalDay) ?? null;
   const isAdmin = profile?.role === "admin";
@@ -517,7 +548,7 @@ export default function Home() {
           <div className="bg-[#4c5638] px-8 py-10 text-center">
             <BrandMark centered />
             <p className="mt-6 text-xs font-semibold uppercase text-[#d9dbbc] brand-condensed">LUMA</p>
-            <h1 className="mt-3 text-4xl font-semibold text-white brand-serif">Administracion</h1>
+            <h1 className="mt-3 text-4xl font-semibold text-white brand-serif">LUMA Studio</h1>
           </div>
           <div className="p-8">
             <input className="mt-2 w-full rounded-2xl border border-[#cac5a7] bg-white/70 px-4 py-3 outline-none transition placeholder:text-[#8a966d] focus:border-[#8a966d]" placeholder="correo del equipo LUMA" value={email} onChange={(event) => setEmail(event.target.value)} />
@@ -540,7 +571,7 @@ export default function Home() {
               <BrandMark />
               <div>
                 <p className="text-xs font-semibold uppercase text-[#d9dbbc] brand-condensed">LUMA</p>
-                <h1 className="mt-2 text-4xl font-semibold md:text-6xl brand-serif">{isAdmin ? "Administracion por modulos" : "Agenda de citas"}</h1>
+                <h1 className="mt-2 text-4xl font-semibold md:text-6xl brand-serif">{isAdmin ? "Gestión LUMA Studio" : "Agenda LUMA Studio"}</h1>
                 <p className="mt-2 text-[#d9dbbc]">{profile?.full_name ?? session.user.email} · {profile?.role === "admin" ? "Acceso completo" : "Negocio"}</p>
               </div>
             </div>
@@ -726,7 +757,7 @@ export default function Home() {
                 <label className="grid gap-1 text-sm font-medium text-[#5d4743]"><span><input className="mr-2" type="checkbox" />Tarjeta</span><input className="rounded-2xl border border-[#cac5a7] bg-white/60 px-3 py-2 text-sm outline-none" name="card_amount" placeholder="Monto" type="number" /></label>
               </div>}
               <Input name="tip_amount" label="Propina" type="number" defaultValue="0" />
-              <Select name="tip_payment_method" label="Pago propina" options={["", "Transferencia", "Efectivo"]} />
+              <Select name="tip_payment_method" label="Pago propina" options={["", "Transferencia", "Efectivo", "Tarjeta"]} />
               <textarea className="min-h-24 rounded-2xl border border-[#cac5a7] bg-white/60 px-3 py-2 text-sm outline-none transition placeholder:text-[#8b7770] focus:border-[#8a966d]" name="notes" placeholder="Observaciones" />
               <Submit>Cerrar servicio</Submit>
             </Form>
@@ -957,7 +988,7 @@ export default function Home() {
                     {!appointment.canceled && !appointment.no_show && !isClosed && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Pendiente de cierre</span>}
                   </div>
                   {!appointment.canceled && !appointment.no_show && !isClosed && <div className="mt-4 flex flex-wrap gap-2">
-                    <button className="rounded-full bg-[#4c5638] px-4 py-2 text-sm font-semibold text-white" onClick={() => { setCloseClientId(appointment.client_id ?? ""); setCloseAppointmentId(appointment.id); setActiveModule("appointments"); setCalendarModalDay(""); setMessage("Cita seleccionada. Completa el formulario de Cerrar servicio en Agenda."); }} type="button">Cerrar en Agenda</button>
+                    <button className="rounded-full bg-[#4c5638] px-4 py-2 text-sm font-semibold text-white" onClick={() => { setCloseClientId(appointment.client_id ?? ""); setCloseAppointmentId(appointment.id); setActiveModule("appointments"); setCalendarModalDay(""); setMessage(""); }} type="button">Cerrar en Agenda</button>
                     {isAdmin && <button className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700" onClick={() => cancelAppointment(appointment.id)} type="button">Cancelar cita</button>}
                   </div>}
                 </div>;
@@ -1066,8 +1097,8 @@ function Submit({ children }: { children: React.ReactNode }) {
 
 function BrandMark({ centered = false }: { centered?: boolean }) {
   return (
-    <div className={`relative h-20 w-20 overflow-hidden rounded-full border border-[#cac5a7]/35 bg-[#4c5638] shadow-lg shadow-black/15 ${centered ? "mx-auto" : "shrink-0"}`}>
-      <Image src="/luma-logo.png" alt="LUMA" fill sizes="80px" className="object-cover" priority />
+    <div className={`relative h-28 w-28 overflow-hidden rounded-full border border-[#cac5a7]/35 bg-[#4c5638] shadow-lg shadow-black/15 ${centered ? "mx-auto" : "shrink-0"}`}>
+      <Image src="/luma-logo.png" alt="LUMA" fill sizes="112px" className="object-cover" priority />
     </div>
   );
 }

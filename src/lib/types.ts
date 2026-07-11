@@ -38,7 +38,7 @@ export type ServiceRecord = {
   transfer_amount: number;
   card_amount: number;
   tip_amount: number;
-  tip_payment_method: "Transferencia" | "Efectivo" | null;
+  tip_payment_method: "Transferencia" | "Efectivo" | "Tarjeta" | null;
   notes: string | null;
   created_at?: string;
 };

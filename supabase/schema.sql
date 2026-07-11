@@ -89,7 +89,7 @@ create table public.service_records (
   transfer_amount numeric(10,2) not null default 0 check (transfer_amount >= 0),
   card_amount numeric(10,2) not null default 0 check (card_amount >= 0),
   tip_amount numeric(10,2) not null default 0 check (tip_amount >= 0),
-  tip_payment_method text check (tip_payment_method in ('Transferencia', 'Efectivo')),
+  tip_payment_method text check (tip_payment_method in ('Transferencia', 'Efectivo', 'Tarjeta')),
   notes text,
   created_at timestamptz not null default now(),
   created_by uuid references auth.users(id)
